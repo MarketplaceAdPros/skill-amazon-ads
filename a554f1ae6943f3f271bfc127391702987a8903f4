@@ -1,0 +1,31 @@
+README.md
+  c263376b6494a7f8 1-63
+.claude-plugin/plugin.json
+  c263376b6494a7f8 1-12
+CHANGELOG.md
+  c263376b6494a7f8 1-6
+skills/amazon-ads/SKILL.md
+  c263376b6494a7f8 1-146
+LICENSE
+  c263376b6494a7f8 1-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.3",
+  "base_commit_sha": "a554f1ae6943f3f271bfc127391702987a8903f4",
+  "prompts": {
+    "c263376b6494a7f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3d0a187d-db73-4fd4-beaf-65b82a344bc1",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Matt Ferrante <matt@heyferrante.com>",
+      "messages": [],
+      "total_additions": 248,
+      "total_deletions": 0,
+      "accepted_lines": 248,
+      "overriden_lines": 0
+    }
+  }
+}
