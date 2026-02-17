@@ -1,0 +1,12 @@
+{
+  "name": "amazon-ads",
+  "version": "1.0.0",
+  "description": "Skill for managing and optimizing Amazon Advertising campaigns — browse campaigns, analyze performance, get bid/budget recommendations, and discover keyword opportunities via the Marketplace Ad Pros MCP server.",
+  "author": {
+    "name": "Marketplace Ad Pros"
+  },
+  "homepage": "https://marketplaceadpros.com",
+  "repository": "https://github.com/MarketplaceAdPros/skill-amazon-ads",
+  "license": "MIT",
+  "keywords": ["amazon", "advertising", "ppc", "campaigns", "optimization", "mcp"]
+}
