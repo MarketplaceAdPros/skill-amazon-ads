@@ -1,12 +1,19 @@
 ---
-name: amazon-ads-mcp
+name: amazon-ads
 description: Guide for using the Marketplace Ad Pros MCP server to manage and analyze Amazon Advertising accounts. Use when working with Amazon Ads campaigns, performance reports, bid/budget recommendations, keyword research, or product data through the MCP tools.
-metadata:
-  author: marketplace-ad-pros
-  version: "1.0"
 ---
 
 # Amazon Ads MCP Server Guide
+
+<!-- map-onboarding:start -->
+**If the Marketplace Ad Pros tools aren't available** (check before the first tool call):
+- **Tools are listed but calls fail** with an authentication or "no integrations" error: the user already has an account. Send them to https://app.marketplaceadpros.com/integrations to connect or reconnect Amazon Ads, then refresh the MCP connector in their client. Don't suggest signing up again.
+- **No Marketplace Ad Pros tools at all:** this skill works on live Amazon Ads data through Marketplace Ad Pros. Say so once, then:
+  - If they already have an account, they only need to add the MCP connector: https://marketplaceadpros.com/amazon-ads-mcp-server-for-claude/
+  - Otherwise they can connect their Amazon account free at https://app.marketplaceadpros.com/signup?r=fHNraWxsLWFtYXpvbi1hZHN8c2tpbGxfbGluaw%3D%3D and then add the connector.
+  - Asking about their data through the MCP needs AI Connect ($10/week) or a higher plan.
+- Never claim to have pulled or changed data without a tool call. General questions can still be answered from this guide.
+<!-- map-onboarding:end -->
 
 You are connected to the Marketplace Ad Pros MCP server for Amazon Advertising management, reporting, and optimization. This guide explains how to use the available tools effectively.
 
@@ -68,79 +75,124 @@ Scoping options for `ask_report_analyst`:
 
 ### Campaign Structure & Browsing
 
-Use these tools to explore what campaigns, ad groups, keywords, and targets exist:
+Use `list_resource_types` to discover all available resource types and their filter schemas. Then use `list_resources` with a `resource_type` to browse data.
 
-| Tool | Use When |
-|------|----------|
-| `list_amazon_ads_campaigns` | User wants to see their campaigns, check campaign states, or you need campaign IDs for deeper exploration |
-| `list_amazon_ads_campaign_ad_groups` | Need to drill into a campaign's ad groups |
-| `list_amazon_ads_campaign_keywords` | Need to see keyword targets in a campaign/ad group |
-| `list_amazon_ads_campaign_targets` | Need to see product/category targeting clauses (ASIN targeting, category targeting) |
-| `list_amazon_ads_campaign_product_ads` | Need to see which products are advertised in a campaign |
+Common resource types:
 
-These tools require `integration_id` and `account_id` at minimum. Campaigns require those two. Ad groups, keywords, targets, and product ads also require `campaign_id`. Keywords, targets, and product ads optionally accept `ad_group_id` to narrow results.
+| Resource Type | Description | Key Filters |
+|---|---|---|
+| `sp_campaigns` | Sponsored Products campaigns | `state`, `name_filter` |
+| `sp_ad_groups` | SP ad groups | `campaign_id` (required) |
+| `sp_keywords` | SP keyword targets | `campaign_id` (required), `ad_group_id` |
+| `sp_targets` | SP product/category targets | `campaign_id` (required), `ad_group_id` |
+| `sp_product_ads` | SP product ads | `campaign_id` (required), `ad_group_id` |
+| `sb_campaigns` | Sponsored Brands campaigns | `state`, `name_filter` |
+| `sb_ad_groups` | SB ad groups | `campaign_id` (required) |
+| `sb_keywords` | SB keyword targets | `campaign_id` (required) |
+| `dsp_advertisers` | DSP advertisers (agency profile, or a self-service seat on a seller/vendor profile) | `next_token` |
+| `dsp_campaigns` | DSP campaigns | `advertiser_id` (required), `state_filter` |
+| `dsp_ad_groups` | DSP ad groups | `advertiser_id` (required), `campaign_id` |
+| `dsp_targets` | DSP targeting rules | `advertiser_id` (required), `ad_group_id` (required) |
+| `dsp_creatives` | DSP ad creatives | `advertiser_id` (required) |
 
-All list tools cap results at 100 items. Use `state_filter` (ENABLED, PAUSED, ARCHIVED) to narrow results. Default is typically ENABLED.
+All resource types require `integration_id` + `account_id`. Results capped at 100 items per page. Use `next_token` from the response to paginate.
+
+#### DSP Hierarchy
+
+DSP resources follow this drill-down hierarchy — each level requires the parent's ID:
+
+1. **Advertisers** (`dsp_advertisers`) — list the DSP advertisers for a profile (agency, or a seller/vendor profile carrying a self-service seat)
+2. **Campaigns** (`dsp_campaigns`) — requires `advertiser_id` from step 1
+3. **Ad Groups** (`dsp_ad_groups`) — requires `advertiser_id`, optionally `campaign_id` to filter
+4. **Targets** (`dsp_targets`) — requires `advertiser_id` + `ad_group_id` from step 3
+5. **Creatives** (`dsp_creatives`) — requires `advertiser_id` (at advertiser level, not campaign)
+
+DSP comes in two shapes: an AGENCY profile (`account_type: "agency"`) hosting many advertisers, or a
+SELF-SERVICE seat attached to an ordinary seller/vendor ads account with no agency profile at all.
+`dsp_advertisers` lists both. Absence of an agency profile does NOT mean the account has no DSP.
 
 ### Recommendations
 
 | Tool | Use When |
 |------|----------|
-| `get_amazon_ads_account_recs` | User wants a general overview of optimization opportunities across bid, budget, and targeting for an account |
-| `get_amazon_ads_ad_group_bid_recs` | User wants Amazon's recommended bids for targets in a specific ad group |
-| `get_amazon_ads_ad_group_keyword_recs` | User wants new keyword suggestions for an ad group, including impression share data |
-| `get_amazon_ads_campaign_budget_rule_recs` | User wants to know about upcoming events (Prime Day, holidays) and suggested budget increases |
-| `get_amazon_ads_campaigns_budget_recs` | User wants to check if campaigns are running out of budget, with estimated missed opportunities |
+| `get_amazon_ads_account_recs` | General optimization opportunities across bid, budget, targeting |
+| `get_amazon_ads_ad_group_bid_recs` | Amazon's recommended bids for targets in a specific ad group |
+| `get_amazon_ads_ad_group_keyword_recs` | New keyword suggestions with impression share data |
+| `get_amazon_ads_campaign_budget_rule_recs` | Upcoming events (Prime Day, holidays) and suggested budget increases |
+| `get_amazon_ads_campaigns_budget_recs` | Check if campaigns are running out of budget with estimated missed opportunities |
+
+### Native Optimization Rules (Budget & Bid Automation)
+
+Use `list_resources`, `create_resources`, `update_resources` with the resource types below to manage Amazon's native automation rules.
+
+| Resource Type | What It Does | Key Limit |
+|---|---|---|
+| `sp_budget_rules` | SP dayparting/performance budget lifts | Only increases budget |
+| `sb_budget_rules` | SB budget lifts (metrics: IS, NTB, ROAS) | Only increases budget |
+| `sd_budget_rules` | SD budget lifts (metrics: ACOS, CTR, CVR, ROAS) | Only increases budget |
+| `sp_optimization_rules` | SP bid optimization — dayparting bids, performance-based bid lifts | Only INCREMENT (increase); no DELETE — pause via `status` |
+| `sb_optimization_rules` | SB CPC cap (beta) — maximize page visits while CPC <= threshold | Scoped to one campaign via entityId |
+
+Common patterns:
+
+- **SCHEDULE rules** (budget or bid): date-ranged or event-based lifts with optional intra-day time windows. Times use the **profile's timezone**.
+- **PERFORMANCE rules**: lift when a metric condition is met. SB budget rules use `IS|NTB|ROAS`; SP and SD budget rules use `ACOS|CTR|CVR|ROAS`; SP optimization rules support 10 metrics including `ACOS`, `ROAS`, `CTR`, `CVR`, `CPC`, `SALES`, `SPEND`, etc.
+- **Auto-association**: include `campaignIds` in the create payload for budget rules and SP optimization rules to auto-associate after successful creation. SB optimization rules are scoped via `entityId` on the rule itself.
+
+Call `list_resource_types(resource_types=["sp_optimization_rules"], include_schemas=true, include_examples=true)` for full field definitions and example payloads.
+
+### Write Operations
+
+If write access is enabled, you can create and update campaigns, ad groups, keywords, targets, product ads, and negative keywords for SP, SB, and DSP. Use `create_resources` and `update_resources` with the appropriate `resource_type`. Call `list_resource_types` with `include_schemas=true` to see the item schema for each type.
+
+**Important limitations:**
+- Campaign state can only be set to **ENABLED** or **PAUSED**. ARCHIVED is not supported via the Amazon Ads API.
+- Always confirm changes with the user before executing write operations.
+- Product ads require valid ASINs that the advertiser owns.
 
 ### Product & Brand Info
 
 | Tool | Use When |
 |------|----------|
-| `get_amazon_ads_product_metadata` | Need product details (title, price, category, BSR, brand, availability) for specific ASINs |
-| `list_brands` | See all brands and their associated profiles |
-| `create_brand` | Create a new brand to organize profiles under |
-| `assign_profiles_to_brand` | Assign or reassign advertising profiles to brands |
-| `get_optimization_guide` | Get the agency's playbook/guide for how they optimize campaigns |
+| `get_amazon_ads_product_metadata` | Product details (title, price, BSR, category) for specific ASINs |
+| `list_brands` | See all brands and their profiles |
+| `create_brand` / `assign_profiles_to_brand` | Organize profiles into brands |
+| `get_optimization_guide` | Campaign optimization playbook and strategy guide |
 
 ## Common Workflows
 
-### "How are my ads doing?" (Account Health Check)
+### Account Health Check
 1. `list_brands` to identify the account
-2. `ask_report_analyst` with a broad question like "For the last 14 days, show me a summary of total spend, sales14d, ACOS, impressions, and clicks across all campaigns."
-3. `get_amazon_ads_account_recs` to surface any optimization recommendations
+2. `ask_report_analyst`: "For the last 14 days, summary of total spend, sales14d, ACOS, impressions, clicks across all campaigns."
+3. `get_amazon_ads_account_recs` to surface optimization recommendations
 
-### "Which campaigns should I optimize?"
-1. `list_brands` to get IDs
-2. `ask_report_analyst`: "For the last 14 days, show campaigns ranked by spend. Include cost, sales14d, ACOS, impressions, clicks. Top 20."
-3. For campaigns with high ACOS or low ROAS, drill in with `list_amazon_ads_campaigns` to get campaign IDs
-4. `get_amazon_ads_campaigns_budget_recs` to check if top campaigns are running out of budget
+### Find Wasted Spend
+1. `ask_report_analyst`: "Last 30 days, keywords with cost > $50 but zero sales14d. Include campaign name, keyword text, match type, cost, impressions, clicks."
+2. `ask_report_analyst`: "Last 30 days, search terms with cost > $20 but zero purchases14d."
 
-### "Find wasted spend"
-1. `ask_report_analyst`: "For the last 30 days, which keywords have cost > $50 but zero sales14d? Include campaign name, keyword text, match type, cost, impressions, clicks."
-2. `ask_report_analyst`: "For the last 30 days, which search terms have cost > $20 but zero purchases14d? Include the search term, campaign, cost, clicks."
+### Filter by Budget or Bid
+**Important:** `list_resources` does NOT support filtering by budget or bid amount — it only supports state and name filters. Use `ask_report_analyst` instead.
 
-### "Expand my keyword targeting"
-1. `list_amazon_ads_campaigns` to find the campaign
-2. `list_amazon_ads_campaign_ad_groups` to find the ad group
-3. `get_amazon_ads_ad_group_keyword_recs` for Amazon's keyword suggestions with impression share data
-4. `ask_report_analyst`: "What are my top converting search terms in the last 30 days that are not already exact match keywords?"
+1. Budget filtering: `ask_report_analyst`: "Campaigns with daily budget greater than 500 in the last 14 days. Include campaign name, budget amount, spend, sales, ACOS."
+2. Bid filtering: `ask_report_analyst`: "Keywords with bid less than 5 in the last 14 days. Include keyword text, bid, match type, campaign name, spend, sales."
 
-### "Check product performance"
-1. `ask_report_analyst`: "Top 10 ASINs by sales14d in the last 14 days. Include ASIN, cost, sales14d, ACOS, impressions."
-2. `get_amazon_ads_product_metadata` with those ASINs to get product details (title, price, BSR, availability)
+Note: Report data shows bid/budget at time of report snapshot (2-3 day lag). For current live bid/budget values, use `list_resources` and inspect the returned entity data.
 
-### "Prepare for an upcoming event (Prime Day, Black Friday)"
-1. `list_amazon_ads_campaigns` to identify key campaigns
-2. `get_amazon_ads_campaign_budget_rule_recs` for each campaign to see suggested budget increases for upcoming events
-3. `ask_report_analyst`: "Show me performance during last year's Prime Day period (July 11-12, 2025) vs the week before. Include spend, sales14d, ACOS."
+### Keyword Expansion
+1. `list_resources(resource_type='sp_campaigns', ...)` then `list_resources(resource_type='sp_ad_groups', ..., filters={'campaign_id': '...'})` to find the ad group
+2. `get_amazon_ads_ad_group_keyword_recs` for Amazon's suggestions with impression share
+3. `ask_report_analyst`: "Top converting search terms in last 30 days not already exact match keywords"
+
+### Product Performance
+1. `ask_report_analyst`: "Top 10 ASINs by sales14d last 14 days. Include ASIN, cost, sales14d, ACOS."
+2. `get_amazon_ads_product_metadata` with those ASINs for product details
 
 ## Tips
 
-- The `ask_report_analyst` tool is by far the most powerful tool. Use it for any data/metrics question. Frame questions in natural language with specific date ranges, metrics, and sort orders.
-- Report data typically has a 2-3 day lag from Amazon. If asked about "today" or "yesterday", note this lag.
-- When the user has multiple profiles, always confirm which one before making calls. The system prompt includes the user's profiles with their IDs.
+- Report data has a 2-3 day lag from Amazon. Note this if asked about "today" or "yesterday."
+- Amazon Ads metrics use 14-day attribution windows (e.g., `sales14d`, `purchases14d`).
+- ACOS = (ad spend / ad sales) x 100. Lower is better. ROAS = ad sales / ad spend.
+- `list_resources` cannot filter by budget or bid amount. Use `ask_report_analyst` for budget/bid filtering against historical report data.
 - Most tools require `integration_id` + `account_id`. Get these from `list_brands` first.
-- Use `brand_id` scoping on `ask_report_analyst` when the user thinks in terms of brands rather than individual profiles.
-- Amazon Ads metrics use "14d" attribution windows (e.g., `sales14d`, `purchases14d`). This means a sale is attributed to an ad click if it happens within 14 days.
-- ACOS = Advertising Cost of Sales = (ad spend / ad sales) * 100. Lower is generally better.
-- ROAS = Return on Ad Spend = ad sales / ad spend. Higher is better. ROAS = 1/ACOS * 100.
+- Use `brand_id` scoping on `ask_report_analyst` when the user thinks in brands rather than profiles.
+- When the user has multiple profiles, always confirm which one before proceeding.
