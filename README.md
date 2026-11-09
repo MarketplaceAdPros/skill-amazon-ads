@@ -17,19 +17,19 @@ See [Using Skills in Claude](https://support.claude.com/en/articles/12512180-usi
 ### Claude Code
 
 ```bash
-claude plugin install amazon-ads --url https://github.com/MarketplaceAdPros/skill-amazon-ads
-```
-
-Or for a specific project only:
-
-```bash
-claude plugin install amazon-ads --url https://github.com/MarketplaceAdPros/skill-amazon-ads --scope project
+npx skills add marketplaceadpros/skill-amazon-ads
 ```
 
 ## Prerequisites
 
 1. A [Marketplace Ad Pros](https://marketplaceadpros.com) account with your Amazon Advertising accounts connected.
-2. The Marketplace Ad Pros MCP server configured in your environment. Add the following to your MCP configuration:
+2. The Marketplace Ad Pros MCP server configured in your environment. Run the following command
+
+```bash
+claude mcp add map --transport http https://app.marketplaceadpros.com/mcp
+```
+
+Alternatively, you can manually add it to your MCP configuration:
 
 ```json
 {
